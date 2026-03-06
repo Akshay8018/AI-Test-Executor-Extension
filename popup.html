@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Test Executor</title>
+  <link rel="stylesheet" href="styles/popup.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+</head>
+<body>
+
+  <!-- ══════════════════════════════════════════════════════════
+       HERO HEADER
+  ══════════════════════════════════════════════════════════ -->
+  <div class="hero">
+    <div class="hero-orb hero-orb-1"></div>
+    <div class="hero-orb hero-orb-2"></div>
+    <div class="hero-inner">
+      <div class="logo-zone">
+        <div class="logo-ring">
+          <div class="logo-ring-inner">
+            <img src="assets/icon128.png" alt="Logo" class="logo-img" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+            <div class="logo-fallback">🤖</div>
+          </div>
+        </div>
+        <div class="status-dot-live" title="Extension Active"></div>
+      </div>
+      <div class="hero-info">
+        <h1 class="hero-title">AI Test Executor</h1>
+        <p class="hero-sub">Autonomous QA · Web App Testing</p>
+        <div class="hero-pills">
+          <span class="pill">🧠 AI Engine</span>
+          <span class="pill">⚡ Auto Run</span>
+          <span class="pill">📊 Reports</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════
+       TAB NAV
+  ══════════════════════════════════════════════════════════ -->
+  <div class="tab-bar">
+    <button class="tab active" data-tab="setup">
+      <span class="tab-icon">&#9881;</span>
+      <span>Setup</span>
+    </button>
+    <button class="tab" data-tab="guide">
+      <span class="tab-icon">&#128203;</span>
+      <span>Guide</span>
+    </button>
+    <button class="tab" data-tab="logs" id="tabLogs">
+      <span class="tab-icon">&#128221;</span>
+      <span>Logs</span>
+      <span class="tab-badge hidden" id="logsBadge">0</span>
+    </button>
+    <button class="tab" data-tab="results" id="tabResults">
+      <span class="tab-icon">&#128202;</span>
+      <span>Results</span>
+    </button>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════
+       TAB: SETUP
+  ══════════════════════════════════════════════════════════ -->
+  <div class="tab-content active" id="tab-setup">
+
+    <!-- App URL -->
+    <div class="field-group">
+      <label class="field-label">
+        <span class="field-icon">🌐</span> Application URL
+      </label>
+      <div class="field-input-wrap">
+        <input type="text" id="appUrl" class="field-input" placeholder="https://your-app.com" />
+        <span class="field-icon-right" id="urlCheck"></span>
+      </div>
+    </div>
+
+    <!-- Login Credentials -->
+    <div class="card-collapse" id="loginCard">
+      <div class="card-collapse-header" id="loginToggle">
+        <div class="card-collapse-left">
+          <span class="card-icon">🔐</span>
+          <span class="card-title">Login Credentials</span>
+          <span class="card-badge green" id="loginBadge">Optional</span>
+        </div>
+        <svg class="chevron" id="loginChevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <path d="M6 9l6 6 6-6"/>
+        </svg>
+      </div>
+      <div class="card-collapse-body" id="loginBody">
+        <div class="two-col">
+          <div class="field-group">
+            <label class="field-label-sm">Username / Email</label>
+            <input type="text" id="loginUsername" class="field-input-sm" placeholder="user@example.com" />
+          </div>
+          <div class="field-group">
+            <label class="field-label-sm">Password</label>
+            <div class="pw-wrap">
+              <input type="password" id="loginPassword" class="field-input-sm" placeholder="••••••••" />
+              <span class="eye" id="togglePwd">👁</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- File Upload -->
+    <div class="card" id="uploadCard">
+      <div class="card-header">
+        <div class="card-left">
+          <span class="card-icon">📂</span>
+          <span class="card-title">TEST CASES FILE</span>
+        </div>
+        <div class="card-right">
+          <span class="card-badge file-types">.XLSX · .XLS · .CSV</span>
+        </div>
+      </div>
+      <div class="card-body">
+      <div class="dropzone" id="dropZone">
+        <input type="file" id="excelUpload" accept=".xlsx,.xls,.csv" />
+        <div class="dropzone-inner" id="dropzoneInner">
+          <div class="dropzone-icon">📥</div>
+          <p class="dropzone-text">Drop your Excel / CSV file here</p>
+          <p class="dropzone-sub" id="fileName">or click to browse</p>
+        </div>
+        <div class="dropzone-selected hidden" id="fileSelected">
+          <span class="file-icon-val" id="fileValidIcon">📄</span>
+          <span id="fileSelectedName"></span>
+          <span class="file-size" id="fileSelectedSize"></span>
+          <span class="file-val-badge" id="fileValidBadge"></span>
+        </div>
+      </div>
+
+      <!-- Inline Validation Banner (shown after file select) -->
+      <div id="fileValidationBanner" class="fv-banner hidden">
+
+        <!-- SUCCESS STATE -->
+        <div id="fvSuccess" class="fv-success hidden">
+          <div class="fv-success-icon">✅</div>
+          <div class="fv-success-body">
+            <div class="fv-success-title">File looks great!</div>
+            <div class="fv-success-sub" id="fvSuccessDetail"></div>
+          </div>
+        </div>
+
+        <!-- ERROR STATE -->
+        <div id="fvError" class="fv-error hidden">
+          <div class="fv-error-header">
+            <span class="fv-error-icon">❌</span>
+            <span class="fv-error-title">Invalid File Format</span>
+            <span class="fv-error-msg" id="fvErrorMsg"></span>
+          </div>
+
+          <!-- Detected columns -->
+          <div class="fv-section" id="fvColSection">
+            <div class="fv-label">📋 Columns detected in your file</div>
+            <div class="fv-tag-row" id="fvDetectedCols"></div>
+          </div>
+
+          <!-- Column mapping table -->
+          <div class="fv-section">
+            <div class="fv-label">🔗 Column Mapping</div>
+            <table class="fv-tbl">
+              <thead><tr><th>Required Field</th><th>Your Column</th><th>Status</th></tr></thead>
+              <tbody id="fvMappingBody"></tbody>
+            </table>
+          </div>
+
+          <!-- How to fix -->
+          <div class="fv-section" id="fvFixSection">
+            <div class="fv-label">🛠 How to Fix</div>
+            <div id="fvFixList" class="fv-fix-list"></div>
+          </div>
+        </div>
+
+      </div><!-- /fileValidationBanner -->
+      </div><!-- /card-body -->
+    </div><!-- /card -->
+
+    <!-- Start Button (disabled until file is valid) -->
+    <button id="startBtn" class="start-btn" disabled>
+      <span class="start-btn-icon">&#9654;</span>
+      <span id="startBtnText">Upload a valid file to enable</span>
+    </button>
+
+  </div><!-- /tab-setup -->
+
+  <!-- ══════════════════════════════════════════════════════════
+       TAB: EXCEL GUIDE
+  ══════════════════════════════════════════════════════════ -->
+  <div class="tab-content" id="tab-guide">
+    <div class="guide-banner">
+      <div class="guide-banner-icon">💡</div>
+      <div>
+        <div class="guide-banner-title">Excel File Format Guide</div>
+        <div class="guide-banner-sub">Columns marked <strong>★ Required</strong> must exist in your file</div>
+      </div>
+    </div>
+
+    <div class="col-grid">
+      <div class="col-card req">
+        <div class="col-card-top">
+          <span class="col-star req-star">★</span>
+          <span class="col-name">TestCaseID</span>
+        </div>
+        <p>Unique ID grouping test steps together. All rows with the same ID form one test case.</p>
+        <div class="col-also">Also: <code>TC ID</code><code>Case ID</code><code>Test ID</code><code>ID</code></div>
+      </div>
+      <div class="col-card req">
+        <div class="col-card-top">
+          <span class="col-star req-star">★</span>
+          <span class="col-name">TestStepDescription</span>
+        </div>
+        <p>Natural language action: "Click Login", "Enter username in field".</p>
+        <div class="col-also">Also: <code>Step</code><code>Action</code><code>Test Step</code></div>
+      </div>
+      <div class="col-card opt">
+        <div class="col-card-top">
+          <span class="col-star opt-star">○</span>
+          <span class="col-name">ExpectedResult</span>
+        </div>
+        <p>What should happen after the step. Used to validate pass/fail.</p>
+        <div class="col-also">Also: <code>Expected</code><code>Result</code><code>Outcome</code></div>
+      </div>
+      <div class="col-card opt">
+        <div class="col-card-top">
+          <span class="col-star opt-star">○</span>
+          <span class="col-name">TestData</span>
+        </div>
+        <p>Input value for the step (text to type, option to select, etc).</p>
+        <div class="col-also">Also: <code>Data</code><code>Input</code><code>Value</code></div>
+      </div>
+      <div class="col-card opt">
+        <div class="col-card-top">
+          <span class="col-star opt-star">○</span>
+          <span class="col-name">TestScenario</span>
+        </div>
+        <p>What the test case is verifying at a high level.</p>
+        <div class="col-also">Also: <code>Scenario</code><code>Title</code><code>Name</code></div>
+      </div>
+      <div class="col-card opt">
+        <div class="col-card-top">
+          <span class="col-star opt-star">○</span>
+          <span class="col-name">StepNumber</span>
+        </div>
+        <p>Order within test case. Auto-numbered if not present.</p>
+        <div class="col-also">Also: <code>Step No</code><code>Seq</code><code>S.No</code></div>
+      </div>
+      <div class="col-card opt">
+        <div class="col-card-top">
+          <span class="col-star opt-star">○</span>
+          <span class="col-name">Priority</span>
+        </div>
+        <p>High / Medium / Low. Shown in the bug report output.</p>
+        <div class="col-also">Also: <code>Severity</code><code>Criticality</code></div>
+      </div>
+      <div class="col-card opt">
+        <div class="col-card-top">
+          <span class="col-star opt-star">○</span>
+          <span class="col-name">Preconditions</span>
+        </div>
+        <p>What must be true before the test case can run.</p>
+        <div class="col-also">Also: <code>Prerequisite</code><code>Setup</code></div>
+      </div>
+    </div>
+
+    <div class="sample-box">
+      <div class="sample-box-title">📄 Sample Excel Layout</div>
+      <div class="sample-scroll">
+        <table class="sample-tbl">
+          <thead>
+            <tr><th>TestCaseID</th><th>TestStepDescription</th><th>TestData</th><th>ExpectedResult</th></tr>
+          </thead>
+          <tbody>
+            <tr><td class="tc">TC001</td><td>Open the login page</td><td></td><td>Login page loads</td></tr>
+            <tr><td class="tc">TC001</td><td>Enter username in username field</td><td>admin@test.com</td><td>Field is filled</td></tr>
+            <tr><td class="tc">TC001</td><td>Enter password in password field</td><td>Pass@123</td><td>Password masked</td></tr>
+            <tr><td class="tc">TC001</td><td>Click the Login button</td><td></td><td>Dashboard is visible</td></tr>
+            <tr><td class="tc2">TC002</td><td>Verify page title is displayed</td><td></td><td>Title contains "Dashboard"</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div><!-- /tab-guide -->
+
+  <!-- ======================================================
+       TAB: LOGS
+  ====================================================== -->
+  <div class="tab-content" id="tab-logs">
+
+    <!-- Live Status Feed -->
+    <div class="live-feed">
+      <div class="live-feed-header">
+        <span class="live-dot" id="liveDot"></span>
+        <span class="live-title">Live Execution Log</span>
+        <span class="countdown-pill hidden" id="countdownDisplay">Calculating...</span>
+      </div>
+      <!-- Current Step Strip -->
+      <div class="current-step-strip hidden" id="currentStepStrip">
+        <span class="cs-label">NOW:</span>
+        <span class="cs-text" id="currentStepText">Waiting...</span>
+      </div>
+      <div class="live-feed-body" id="liveFeedBody">
+        <div class="feed-idle">Waiting for execution to start...</div>
+      </div>
+    </div>
+
+    <!-- Progress bar -->
+    <div class="prog-bar-wrap">
+      <div class="prog-bar-track">
+        <div class="prog-bar-fill" id="progressBar"></div>
+      </div>
+      <span class="prog-bar-label" id="progressPercent">0%</span>
+    </div>
+
+    <!-- Status message -->
+    <div id="currentAction" class="status-msg">Waiting for input...</div>
+
+    <!-- Stop Button -->
+    <button id="stopBtn" class="stop-btn hidden">
+      <span class="stop-btn-icon">&#9209;</span> Stop Execution
+    </button>
+
+  </div><!-- /tab-logs -->
+
+  <!-- ======================================================
+       TAB: RESULTS
+  ====================================================== -->
+  <div class="tab-content" id="tab-results">
+
+    <!-- Radial Progress -->
+    <div class="results-hero">
+      <div class="radial-wrap">
+        <svg class="radial-svg" viewBox="0 0 120 120">
+          <circle class="radial-track" cx="60" cy="60" r="50"/>
+          <circle class="radial-bar" id="radialBar" cx="60" cy="60" r="50" stroke-dasharray="0 314"/>
+        </svg>
+        <div class="radial-center">
+          <div class="radial-pct" id="radialPct">0%</div>
+          <div class="radial-label">Progress</div>
+        </div>
+      </div>
+      <div class="results-stats">
+        <div class="stat-card total">
+          <div class="stat-num" id="totalCases">0</div>
+          <div class="stat-lbl">Total</div>
+        </div>
+        <div class="stat-card pass">
+          <div class="stat-num" id="passedSteps">0</div>
+          <div class="stat-lbl">Passed</div>
+        </div>
+        <div class="stat-card fail">
+          <div class="stat-num" id="failedSteps">0</div>
+          <div class="stat-lbl">Failed</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Error Panel -->
+    <div id="errorPanel" class="err-panel hidden">
+      <div class="err-panel-header">
+        <span>Column Mapping Issue</span>
+        <button id="errorCloseBtn" class="err-close">X</button>
+      </div>
+      <div class="err-panel-body">
+        <div class="err-section">
+          <div class="err-label">Columns in your file</div>
+          <div id="detectedColumnsList" class="tag-list"></div>
+        </div>
+        <div class="err-section">
+          <div class="err-label">Field Mapping</div>
+          <table class="map-tbl">
+            <thead><tr><th>Field</th><th>Mapped To</th><th>Status</th></tr></thead>
+            <tbody id="mappingTableBody"></tbody>
+          </table>
+        </div>
+        <div class="err-section" id="missingSection">
+          <div class="err-label">How to Fix</div>
+          <div id="missingFieldsHelp" class="fix-list"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Download Buttons -->
+    <div id="reportLinks" class="dl-buttons hidden">
+      <button id="downloadReport" class="dl-btn dl-html">
+        <span>&#128196;</span> HTML Execution Report
+      </button>
+      <button id="downloadBugs" class="dl-btn dl-xls">
+        <span>&#128027;</span> Bug Report Excel
+      </button>
+    </div>
+
+    <!-- Waiting state (shown before execution completes) -->
+    <div id="resultsWaiting" class="results-waiting">
+      <div class="rw-icon">&#128202;</div>
+      <div class="rw-title">No results yet</div>
+      <div class="rw-sub">Start execution from the Setup tab to see results here.</div>
+    </div>
+
+  </div><!-- /tab-results -->
+
+  <script src="libs/xlsx.min.js"></script>
+  <script src="libs/FileSaver.js"></script>
+  <script src="excelParser.js"></script>
+  <script src="stepInterpreter.js"></script>
+  <script src="reportGenerator.js"></script>
+  <script src="bugGenerator.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

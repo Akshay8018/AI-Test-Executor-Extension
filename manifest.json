@@ -1,0 +1,45 @@
+{
+  "manifest_version": 3,
+  "name": "AI Test Executor Agent",
+  "version": "1.0",
+  "description": "Autonomous AI Agent to execute manual test cases from Excel against web applications.",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage",
+    "tabs",
+    "webNavigation"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "assets/icon16.png",
+      "48": "assets/icon48.png",
+      "128": "assets/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "assets/icon16.png",
+    "48": "assets/icon48.png",
+    "128": "assets/icon128.png"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [ "<all_urls>" ],
+      "js": [ "content.js" ],
+      "all_frames": true
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [ "libs/xlsx.min.js", "libs/FileSaver.js", "assets/*" ],
+      "matches": [ "<all_urls>" ]
+    }
+  ]
+}
