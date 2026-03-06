@@ -19,7 +19,7 @@ async function executeTestCases(testCases, tabId) {
   var estimatedSecs = totalSteps * 4 + testCases.length * 3;
   broadcastTiming(testCases.length, totalSteps, estimatedSecs);
 
-  for (var i = 0; i < testCases.length; i++) {
+  outer: for (var i = 0; i < testCases.length; i++) {
     var tc = testCases[i];
 
     broadcastUI({
@@ -46,7 +46,7 @@ async function executeTestCases(testCases, tabId) {
       });
       results.failed++;
       results.testCases.push(tcResult);
-      break;
+      break outer;
     }
 
     for (var j = 0; j < tc.steps.length; j++) {
@@ -60,7 +60,12 @@ async function executeTestCases(testCases, tabId) {
           status: 'Failed',
           actualResult: 'Stopped by user'
         });
-        break;
+        results.failed++;
+        results.testCases.push(tcResult);
+        results.duration = Math.round((Date.now() - results.startTime) / 1000);
+        broadcastUI({ kind: 'tc-fail', message: tc.id + ' -- STOPPED' });
+        broadcastStatus(results, true);
+        return results;
       }
       var step = tc.steps[j];
       var shortDesc = step.description.length > 70
@@ -154,6 +159,9 @@ async function executeTestCases(testCases, tabId) {
 async function retryAction(tabId, action, maxRetries) {
   var lastResult = { status: 'Failed', error: 'Not executed' };
   for (var attempt = 0; attempt < maxRetries; attempt++) {
+    if (typeof executionState !== 'undefined' && executionState.abortRequested) {
+      return lastResult;
+    }
     try {
       var response = await sendToContent(tabId, { type: 'EXECUTE_ACTION', action: action });
       if (response && (response.status === 'Success' || response.status === 'Passed')) {

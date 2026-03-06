@@ -24,6 +24,15 @@ chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
   
   if (request.type === 'STOP_TESTS') {
     executionState.abortRequested = true;
+    var tid = executionState.tabId;
+    if (tid) {
+      chrome.tabs.sendMessage(tid, { type: 'EXECUTOR_ABORT' }).catch(function() {});
+      chrome.webNavigation.getAllFrames({ tabId: tid }).then(function(frames) {
+        (frames || []).forEach(function(f) {
+          chrome.tabs.sendMessage(tid, { type: 'EXECUTOR_ABORT' }, { frameId: f.frameId }).catch(function() {});
+        });
+      }).catch(function() {});
+    }
     sendResponse({ status: 'Stopping' });
     return true;
   }
@@ -67,25 +76,46 @@ async function handleStartTests(request) {
     var tabId = tab.id;
     executionState.tabId = tabId;
 
+    chrome.tabs.sendMessage(tabId, { type: 'EXECUTOR_RESET' }).catch(function() {});
+    try {
+      var frames = await chrome.webNavigation.getAllFrames({ tabId: tabId });
+      (frames || []).forEach(function(f) {
+        chrome.tabs.sendMessage(tabId, { type: 'EXECUTOR_RESET' }, { frameId: f.frameId }).catch(function() {});
+      });
+    } catch (e) {}
+
     // Navigate to app URL
     broadcastUI({ kind: 'info', message: 'Opening application URL...' });
     await chrome.tabs.update(tabId, { url: request.url });
     await waitForTabLoad(tabId);
+    if (executionState.abortRequested) throw new Error('ABORTED');
     broadcastUI({ kind: 'step-pass', message: 'Page loaded successfully' });
 
     // Perform login if credentials supplied
     if (request.loginCreds && request.loginCreds.username) {
       await performLogin(tabId, request.loginCreds);
+      if (executionState.abortRequested) throw new Error('ABORTED');
       await sleep(1500);
     }
+    if (executionState.abortRequested) throw new Error('ABORTED');
 
     // Execute test cases
     var results = await executeTestCases(request.testCases, tabId);
-    
+
     executionState.running = false;
     return { status: 'Completed', results: results };
   } catch (err) {
     executionState.running = false;
+    if (err && err.message === 'ABORTED') {
+      broadcastUI({ kind: 'info', message: 'Execution stopped by user.' });
+      broadcastStatus({ total: 0, passed: 0, failed: 0, testCases: [] }, true);
+      chrome.storage.local.get(['executionState'], function(data) {
+        var state = data.executionState || {};
+        state.isRunning = false;
+        chrome.storage.local.set({ executionState: state });
+      });
+      return { status: 'Stopped' };
+    }
     throw err;
   }
 }
@@ -96,12 +126,13 @@ async function performLogin(tabId, creds) {
   var maxRetries = 4; // 4 attempts * ~15 seconds inside content.js = 60s total tolerance
 
   for (var attempt = 1; attempt <= maxRetries; attempt++) {
+    if (executionState.abortRequested) return;
     try {
       var hasSuccess = false;
-      
+
       if (chrome.webNavigation && chrome.webNavigation.getAllFrames) {
         var frames = await chrome.webNavigation.getAllFrames({ tabId: tabId });
-        
+        if (executionState.abortRequested) return;
         // Forcefully inject content.js into all frames to combat rapid OAuth redirects
         try {
           await chrome.scripting.executeScript({
@@ -111,6 +142,7 @@ async function performLogin(tabId, creds) {
         } catch (injectionErr) {
           console.warn('Manual script injection skipped bounds:', injectionErr);
         }
+        if (executionState.abortRequested) return;
 
         // Send the PERFORM_LOGIN message to EVERY frame individually.
         var promises = frames.map(function(frame) {
@@ -124,9 +156,8 @@ async function performLogin(tabId, creds) {
 
         var results = await Promise.all(promises);
         hasSuccess = results.some(function(r) { return r && r.status === 'Success'; });
-        
+        if (results.some(function(r) { return r && r.status === 'Aborted'; })) return;
       } else {
-        // Fallback
         var response = await new Promise(function(resolve) {
           chrome.tabs.sendMessage(tabId, { type: 'PERFORM_LOGIN', creds: creds }, function(res) {
             if (chrome.runtime.lastError) resolve(null);
@@ -134,61 +165,91 @@ async function performLogin(tabId, creds) {
           });
         });
         hasSuccess = response && response.status === 'Success';
+        if (response && response.status === 'Aborted') return;
       }
+      if (executionState.abortRequested) return;
 
       // If the content script successfully returned, or if the UI_LOG channel reported a button click:
       if (hasSuccess || executionState.loginAttempted) {
         await sleep(2000);
+        if (executionState.abortRequested) return;
         await waitForTabLoad(tabId);
         broadcastUI({ kind: 'step-pass', message: 'Login completed' });
-        return; // Success! Exit the loop.
+        return;
       } else {
-        // Did not succeed, page might be redirecting still. Wait and retry.
         broadcastUI({ kind: 'info', message: '[Injector] Login injection returned no success. Retrying (' + attempt + '/' + maxRetries + ')...' });
         await sleep(3000);
       }
     } catch (e) {
+      if (executionState.abortRequested) return;
       if (executionState.loginAttempted) {
         await sleep(2000);
+        if (executionState.abortRequested) return;
         await waitForTabLoad(tabId);
         broadcastUI({ kind: 'step-pass', message: 'Login completed' });
-        return; 
+        return;
       }
       broadcastUI({ kind: 'info', message: '[Injector] Caught disconnect during injection, retrying...' });
       await sleep(3000);
     }
   }
 
-  // If we exhaust the loop:
-  broadcastUI({ kind: 'step-fail', message: 'Login engines timed out without success after chasing redirects.' });
+  if (!executionState.abortRequested) {
+    broadcastUI({ kind: 'step-fail', message: 'Login engines timed out without success after chasing redirects.' });
+  }
 }
 
 function waitForTabLoad(tabId) {
   return new Promise(function(resolve) {
     function finalize() {
-      // Add a small generic sleep after "complete" so SPAs finish rendering UI
-      setTimeout(resolve, 2000); 
+      setTimeout(resolve, 2000);
     }
-    
+
+    function checkAbort() {
+      if (executionState.abortRequested) {
+        clearInterval(pollId);
+        if (timeoutId) clearTimeout(timeoutId);
+        chrome.tabs.onUpdated.removeListener(listener);
+        resolve();
+      }
+    }
+
+    var listener;
+    var timeoutId;
+    var pollId = setInterval(checkAbort, 400);
+
     chrome.tabs.get(tabId, function(tab) {
+      if (executionState.abortRequested) {
+        clearInterval(pollId);
+        resolve();
+        return;
+      }
       if (tab && tab.status === 'complete') {
+        clearInterval(pollId);
         finalize();
         return;
       }
-      
-      var timeoutId;
-      function check(tId, changeInfo) {
-        if (tId === tabId && changeInfo.status === 'complete') {
-          chrome.tabs.onUpdated.removeListener(check);
+
+      listener = function(tId, changeInfo) {
+        if (executionState.abortRequested) {
+          chrome.tabs.onUpdated.removeListener(listener);
           clearTimeout(timeoutId);
+          clearInterval(pollId);
+          resolve();
+          return;
+        }
+        if (tId === tabId && changeInfo.status === 'complete') {
+          chrome.tabs.onUpdated.removeListener(listener);
+          clearTimeout(timeoutId);
+          clearInterval(pollId);
           finalize();
         }
-      }
-      chrome.tabs.onUpdated.addListener(check);
-      
-      // Fallback after 10 seconds
+      };
+      chrome.tabs.onUpdated.addListener(listener);
+
       timeoutId = setTimeout(function() {
-        chrome.tabs.onUpdated.removeListener(check);
+        chrome.tabs.onUpdated.removeListener(listener);
+        clearInterval(pollId);
         finalize();
       }, 10000);
     });
