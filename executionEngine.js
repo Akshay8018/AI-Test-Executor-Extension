@@ -189,6 +189,7 @@ function broadcastUI(payload) {
     ? { type: 'UI_UPDATE', kind: 'info', message: payload }
     : Object.assign({ type: 'UI_UPDATE', kind: 'info' }, payload);
   chrome.runtime.sendMessage(msg).catch(function() {});
+  persistUI(msg);
 }
 
 function broadcastTiming(tcCount, stepCount, estimatedSecs) {
@@ -198,6 +199,7 @@ function broadcastTiming(tcCount, stepCount, estimatedSecs) {
     stepCount: stepCount,
     estimatedSecs: estimatedSecs
   }).catch(function() {});
+  persistTiming(tcCount, stepCount, estimatedSecs);
 }
 
 function broadcastStatus(results, finished) {
@@ -206,6 +208,49 @@ function broadcastStatus(results, finished) {
     results: results,
     finished: !!finished
   }).catch(function() {});
+  persistStatus(results, finished);
+}
+
+function persistUI(msg) {
+  chrome.storage.local.get(['executionState'], function(data) {
+    var state = data.executionState || {};
+    state.logLines = state.logLines || [];
+    state.logLines.push({
+      text: msg.message || '',
+      kind: msg.kind || 'info',
+      full: msg.fullMessage || msg.message || ''
+    });
+    if (msg.fullMessage || msg.message) state.currentStep = msg.fullMessage || msg.message;
+    chrome.storage.local.set({ executionState: state });
+  });
+}
+
+function persistTiming(tcCount, stepCount, estimatedSecs) {
+  chrome.storage.local.get(['executionState'], function(data) {
+    var state = data.executionState || {};
+    state.tcCount = tcCount;
+    state.stepCount = stepCount;
+    state.countdownSecs = estimatedSecs;
+    chrome.storage.local.set({ executionState: state });
+  });
+}
+
+function persistStatus(results, finished) {
+  chrome.storage.local.get(['executionState', 'lastResults'], function(data) {
+    var state = data.executionState || {};
+    var total = (results && results.total) || 0;
+    var passed = (results && results.passed) || 0;
+    var failed = (results && results.failed) || 0;
+    var pct = total ? Math.min(Math.round(((passed + failed) / total) * 100), 100) : 0;
+    state.progress = { total: total, passed: passed, failed: failed, pct: pct };
+    state.totalCases = total;
+    if (finished) {
+      state.isRunning = false;
+      chrome.storage.local.set({ executionState: state, lastResults: results || null });
+    } else {
+      chrome.storage.local.set({ executionState: state });
+    }
+  });
 }
 
 function sleep(ms) {

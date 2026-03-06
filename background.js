@@ -45,6 +45,21 @@ async function handleStartTests(request) {
   executionState.running = true;
   executionState.abortRequested = false;
 
+  // Persist so popup can restore if user reopens while execution is running
+  chrome.storage.local.set({
+    executionState: {
+      isRunning: true,
+      logLines: [],
+      currentStep: '',
+      progress: { total: 0, passed: 0, failed: 0, pct: 0 },
+      totalCases: 0,
+      countdownSecs: 0,
+      tcCount: 0,
+      stepCount: 0
+    },
+    lastResults: null
+  });
+
   try {
     // Get active tab
     var tabs = await chrome.tabs.query({ active: true, currentWindow: true });
