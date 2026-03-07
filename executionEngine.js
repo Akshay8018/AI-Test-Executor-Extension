@@ -81,8 +81,18 @@ async function executeTestCases(testCases, tabId) {
         tcId: tc.id
       });
 
-      // Always use full step description for execution (not truncated)
-      var action = interpretStep(step.description, step.testData);
+      // Use AI Step Analyzer deep parser first (appended NLU features)
+      var action;
+      if (typeof analyzeStepIntent === 'function' && typeof buildActionFromIntent === 'function') {
+        var intent = analyzeStepIntent(step.description, step.expectedResult);
+        var baseAction = interpretStep(step.description, step.testData);
+        action = buildActionFromIntent(intent, baseAction);
+        if (action.isAiResolved) {
+           broadcastUI({ kind: 'info', message: '[AI NLU] Extracted action: ' + action.type + ', target: ' + action.target + (action.section ? ', context: ' + action.section : '') });
+        }
+      } else {
+        action = interpretStep(step.description, step.testData);
+      }
 
       // Ensure validation steps actually use the ExpectedResult text
       // from Excel when present (for content.js validate logic).
@@ -119,6 +129,7 @@ async function executeTestCases(testCases, tabId) {
         status: (stepResult.status === 'Success' || stepResult.status === 'Passed') ? 'Passed' : 'Failed',
         actualResult: stepResult.actual || stepResult.error ||
           (stepResult.status === 'Success' ? 'Action completed successfully' : 'Action failed'),
+        locatorUsed: action.isAiResolved ? 'AI Generated Locator' : 'Standard Locator',
         screenshot: screenshot
       };
 
@@ -126,7 +137,8 @@ async function executeTestCases(testCases, tabId) {
         tcResult.status = 'Failed';
         broadcastUI({
           kind: 'step-fail',
-          message: 'Step ' + step.stepNumber + ' FAILED: ' + (stepResult.error || 'Action did not succeed')
+          message: 'Step ' + step.stepNumber + ' FAILED',
+          errorDetails: stepResult.error || stepResult.actual || 'Action did not succeed'
         });
       } else {
         broadcastUI({
@@ -162,11 +174,28 @@ async function retryAction(tabId, action, maxRetries) {
     if (typeof executionState !== 'undefined' && executionState.abortRequested) {
       return lastResult;
     }
+    
+    // First, ask the content script to trigger DOM Analysis map build (Step 3: Analyze current page)
+    if (attempt === 0) {
+      await sendToContent(tabId, { type: 'AI_ANALYZE_DOM' });
+    }
+
     try {
       var response = await sendToContent(tabId, { type: 'EXECUTE_ACTION', action: action });
       if (response && (response.status === 'Success' || response.status === 'Passed')) {
         return response;
       }
+      
+      // If standard EXECUTE_ACTION fails, invoke the deep AI Healer
+      if ((!response || response.status === 'Failed') && (action.type !== 'validate' && action.type !== 'navigate' && action.type !== 'wait')) {
+          broadcastUI({ kind: 'info', message: '[AI Healer] Standard locator failed. Triggering Smart DOM resolution for: ' + action.target });
+          var healResponse = await sendToContent(tabId, { type: 'AI_EXECUTE_ACTION', action: action });
+          if (healResponse && (healResponse.status === 'Success' || healResponse.status === 'Passed')) {
+              broadcastUI({ kind: 'info', message: '[AI Healer] Successfully healed and executed step via dynamic generation.' });
+              return healResponse;
+          }
+      }
+      
       lastResult = response || { status: 'Failed', error: 'No response' };
     } catch (e) {
       lastResult = { status: 'Failed', error: e.message };

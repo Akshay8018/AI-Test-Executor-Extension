@@ -19,6 +19,7 @@ function generateBugExcel(results) {
           'StepDescription': step.description,
           'ExpectedResult': step.expectedResult,
           'ActualResult': step.actualResult || 'N/A',
+          'LocatorUsed': step.locatorUsed || 'N/A',
           'Priority': tc.priority || 'Medium',
           'Timestamp': new Date().toISOString(),
           'ScreenshotNote': step.screenshot ? 'See HTML Report' : 'N/A'

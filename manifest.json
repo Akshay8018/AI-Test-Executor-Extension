@@ -31,7 +31,7 @@
   "content_scripts": [
     {
       "matches": [ "<all_urls>" ],
-      "js": [ "content.js" ],
+      "js": [ "content.js", "aiDomAnalyzer.js", "aiHealer.js" ],
       "all_frames": true
     }
   ],

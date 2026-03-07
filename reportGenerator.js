@@ -23,6 +23,7 @@ function generateHTMLReport(results) {
         '<td>' + escHtml(step.description) + '</td>' +
         '<td>' + escHtml(step.expectedResult) + '</td>' +
         '<td>' + escHtml(step.actualResult || '—') + '</td>' +
+        '<td><span style="font-size:10px;color:#888;">' + escHtml(step.locatorUsed || '—') + '</span></td>' +
         '<td>' + badge + '</td>' +
         '<td>' + screenshot + '</td>' +
         '</tr>';
@@ -37,7 +38,7 @@ function generateHTMLReport(results) {
         '<strong>' + escHtml(tc.id) + '</strong> — ' + escHtml(tc.scenario) +
       '</div>' +
       '<table class="step-table"><thead><tr>' +
-        '<th>#</th><th>Step</th><th>Expected</th><th>Actual</th><th>Status</th><th>Evidence</th>' +
+        '<th>#</th><th>Step</th><th>Expected</th><th>Actual</th><th>Locator</th><th>Status</th><th>Evidence</th>' +
       '</tr></thead><tbody>' + stepRows + '</tbody></table></div>';
   }).join('');
 

@@ -10,6 +10,32 @@ document.addEventListener('DOMContentLoaded', function () {
   function qA(sel) { return document.querySelectorAll(sel); }
   function on(id, ev, fn) { var el = $(id); if (el) el.addEventListener(ev, fn); }
 
+  function checkStartBtnState() {
+    var urlEl  = $('appUrl');
+    var upload = $('excelUpload');
+    var url    = urlEl ? urlEl.value.trim() : '';
+    var file   = upload ? upload.files[0] : null;
+    var btn    = $('startBtn');
+    if (!btn) return;
+    
+    var validUrl = /^https?:\/\/.+/.test(url);
+    if (!validUrl || !file) {
+      btn.disabled = true;
+      var btnText = $('startBtnText');
+      if (btnText) {
+        if (!file) btnText.textContent = 'Upload a valid file to enable';
+        else if (!validUrl) btnText.textContent = 'Enter a valid App URL to run';
+      }
+    } else {
+      btn.disabled = false;
+      var btnText = $('startBtnText');
+      if (btnText) {
+          if (currentResults) btnText.textContent = '✓ Done — Run Again';
+          else btnText.textContent = '▶ Start Test Execution';
+      }
+    }
+  }
+
   // ─── TAB NAVIGATION ──────────────────────────────────────────────────────
   function resetLogsBadge() {
     var badge = $('logsBadge');
@@ -67,6 +93,7 @@ document.addEventListener('DOMContentLoaded', function () {
     if (!val)                         { check.textContent = ''; }
     else if (/^https?:\/\/.+/.test(val)) { check.textContent = '✅'; }
     else                              { check.textContent = '⚠️'; }
+    checkStartBtnState();
   });
 
   // ─── FILE DRAG & DROP ────────────────────────────────────────────────────
@@ -116,18 +143,14 @@ document.addEventListener('DOMContentLoaded', function () {
       if (badgeEl) { badgeEl.textContent = '✅ Valid'; badgeEl.className = 'file-val-badge valid'; }
       if (iconEl)  iconEl.textContent = '📗';
       
-      var btn = $('startBtn'), btnText = $('startBtnText');
-      if (btn) btn.disabled = false;
-      if (btnText) btnText.textContent = 'Start Test Execution';
+      checkStartBtnState();
       
     }).catch(function(err) {
       showFvError(err);
       if (badgeEl) { badgeEl.textContent = '❌ Invalid'; badgeEl.className = 'file-val-badge invalid'; }
       if (iconEl)  iconEl.textContent = '📕';
 
-      var btn = $('startBtn'), btnText = $('startBtnText');
-      if (btn) btn.disabled = true;
-      if (btnText) btnText.textContent = 'Upload a valid file to enable';
+      checkStartBtnState();
     });
   }
 
@@ -246,9 +269,9 @@ document.addEventListener('DOMContentLoaded', function () {
     var file   = upload ? upload.files[0] : null;
     hideErrorPanel();
 
-    if (!url)                           { setStatus('Please enter an Application URL.', true); return; }
-    if (!/^https?:\/\/.+/.test(url))    { setStatus('URL must start with http:// or https://', true); return; }
-    if (!file)                          { setStatus('Please upload a test cases file.', true); return; }
+    if (!url)                           { alert('❌ Please enter an Application URL.'); setStatus('Please enter an Application URL.', true); return; }
+    if (!/^https?:\/\/.+/.test(url))    { alert('❌ URL must start with http:// or https://'); setStatus('URL must start with http:// or https://', true); return; }
+    if (!file)                          { alert('❌ Please upload a test cases file.'); setStatus('Please upload a test cases file.', true); return; }
 
     var btn     = $('startBtn');
     var btnText = $('startBtnText');
@@ -344,7 +367,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     if (msg.type === 'UI_UPDATE') {
       var kind = msg.kind || 'info';
-      addFeedLine(msg.message || '', kind, msg.fullMessage);
+      addFeedLine(msg.message || '', kind, msg.fullMessage, msg.errorDetails);
       // NOW strip shows full step text (no truncation) so user sees exact action being run
       if (kind === 'step-run' || kind === 'tc-start') {
         updateCurrentStep(msg.fullMessage || msg.message || '');
@@ -375,10 +398,9 @@ document.addEventListener('DOMContentLoaded', function () {
         addFeedLine('Finished. Passed: ' + r.passed + ' | Failed: ' + r.failed, r.failed > 0 ? 'tc-fail' : 'tc-pass');
         var liveDot = $('liveDot');
         if (liveDot) liveDot.classList.remove('active');
-        var btn = $('startBtn');    if (btn) btn.disabled = false;
-        var bt  = $('startBtnText'); if (bt)  bt.textContent = '✓ Done — Run Again';
         var rl  = $('reportLinks'); if (rl)  rl.classList.remove('hidden');
         var sBtn = $('stopBtn');    if (sBtn) sBtn.classList.add('hidden');
+        checkStartBtnState();
         switchTab('results');
       }
     }
@@ -443,7 +465,7 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   // ─── LIVE FEED ────────────────────────────────────────────────────────────
-  function addFeedLine(text, kind, tooltipFullText) {
+  function addFeedLine(text, kind, tooltipFullText, errorDetails) {
     var body = $('liveFeedBody');
     if (!body) return;
     var idle = body.querySelector('.feed-idle');
@@ -492,9 +514,13 @@ document.addEventListener('DOMContentLoaded', function () {
 
     } else if (kind === 'step-fail') {
       line.className = 'feed-line feed-step-fail';
+      var reasonHtml = errorDetails ? '<div class="fail-reason"><strong>Reason:</strong> ' + escHtml(errorDetails) + '</div>' : '';
       line.innerHTML =
         '<span class="ts">[' + ts + ']</span>' +
-        '<span class="msg">' + escHtml(text) + '</span>';
+        '<div class="fail-content">' +
+          '<span class="msg">' + escHtml(text) + '</span>' +
+          reasonHtml +
+        '</div>';
 
     } else if (kind === 'tc-pass') {
       line.className = 'feed-line feed-tc-pass';
@@ -668,10 +694,10 @@ document.addEventListener('DOMContentLoaded', function () {
         // Keep default tab (Setup) when opening; only switch to Logs when run is still in progress
         var stopBtn = $('stopBtn');    if (stopBtn) stopBtn.classList.add('hidden');
         var liveDot = $('liveDot');    if (liveDot) liveDot.classList.remove('active');
-        var btn = $('startBtn');       if (btn) btn.disabled = false;
-        var bt = $('startBtnText');   if (bt) bt.textContent = '✓ Done — Run Again';
         var rl = $('reportLinks');    if (rl) rl.classList.remove('hidden');
         var rw = $('resultsWaiting'); if (rw) rw.classList.add('hidden');
+        
+        checkStartBtnState();
       }
     });
   }

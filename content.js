@@ -351,7 +351,31 @@
       }
 
       if (!el) {
-        return { status: 'Failed', error: 'Element not found: "' + action.target + '"' };
+        var reason = 'Element "' + action.target + '" does not exist in the visible DOM.';
+        // Diagnostic: check if it exists but is hidden
+        var tLower = (action.target || '').toLowerCase();
+        if (tLower) {
+          var allEls = Array.from(document.querySelectorAll('*'));
+          var hiddenMatch = allEls.find(function(e) {
+              return e.children.length === 0 && (e.textContent || e.value || '').toLowerCase().includes(tLower);
+          });
+          if (hiddenMatch) {
+              var style = window.getComputedStyle(hiddenMatch);
+              var issues = [];
+              if (style.display === 'none') issues.push('display: none');
+              if (style.visibility === 'hidden') issues.push('visibility: hidden');
+              if (parseFloat(style.opacity) === 0) issues.push('opacity: 0');
+              var r = hiddenMatch.getBoundingClientRect();
+              if (r.width === 0 || r.height === 0) issues.push('zero dimensions');
+              
+              if (issues.length > 0) {
+                  reason = 'Element "' + action.target + '" exists in the DOM but is HIDDEN (' + issues.join(', ') + ').';
+              } else {
+                  reason = 'Element "' + action.target + '" exists but may be covered by a popup/overlay or inside a closed dropdown.';
+              }
+          }
+        }
+        return { status: 'Failed', error: reason };
       }
 
       el.scrollIntoView({ behavior: 'smooth', block: 'center' });
