@@ -288,6 +288,14 @@ document.addEventListener('DOMContentLoaded', function () {
         password:      ($('loginPassword')  || {}).value || ''
       };
 
+      // Open execution in a separate popup window (app-like on the taskbar) so user can watch progress and stop from Logs
+      chrome.windows.create({
+        url: chrome.runtime.getURL('popup.html'),
+        type: 'popup',
+        width: 480,
+        height: 720
+      });
+
       chrome.runtime.sendMessage({ type: 'START_TESTS', testCases: testCases, url: url, loginCreds: loginCreds },
         function (response) {
           if (chrome.runtime.lastError) {
@@ -631,6 +639,8 @@ document.addEventListener('DOMContentLoaded', function () {
         logLines.forEach(function(line) {
           addFeedLine(line.text || '', line.kind || 'info', line.full || line.text);
         });
+        // Don't show badge count when user just opens the extension; only during live run.
+        resetLogsBadge();
       }
 
       // Restore progress

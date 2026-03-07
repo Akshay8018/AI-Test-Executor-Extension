@@ -12,6 +12,15 @@ var executionState = {
   loginAttempted: false
 };
 
+chrome.action.onClicked.addListener(function() {
+  chrome.windows.create({
+    url: chrome.runtime.getURL('popup.html'),
+    type: 'popup',
+    width: 480,
+    height: 720
+  });
+});
+
 chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
   if (request.type === 'START_TESTS') {
     handleStartTests(request).then(function(result) {
@@ -70,12 +79,14 @@ async function handleStartTests(request) {
   });
 
   try {
-    // Get active tab
-    var tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-    var tab = tabs[0];
-    var tabId = tab.id;
+    // Open the app URL in a new tab in the real Chrome browser (not in the extension popup window)
+    broadcastUI({ kind: 'info', message: 'Opening application in browser...' });
+    var newTab = await chrome.tabs.create({ url: request.url });
+    var tabId = newTab.id;
     executionState.tabId = tabId;
 
+    await waitForTabLoad(tabId);
+    if (executionState.abortRequested) throw new Error('ABORTED');
     chrome.tabs.sendMessage(tabId, { type: 'EXECUTOR_RESET' }).catch(function() {});
     try {
       var frames = await chrome.webNavigation.getAllFrames({ tabId: tabId });
@@ -83,12 +94,6 @@ async function handleStartTests(request) {
         chrome.tabs.sendMessage(tabId, { type: 'EXECUTOR_RESET' }, { frameId: f.frameId }).catch(function() {});
       });
     } catch (e) {}
-
-    // Navigate to app URL
-    broadcastUI({ kind: 'info', message: 'Opening application URL...' });
-    await chrome.tabs.update(tabId, { url: request.url });
-    await waitForTabLoad(tabId);
-    if (executionState.abortRequested) throw new Error('ABORTED');
     broadcastUI({ kind: 'step-pass', message: 'Page loaded successfully' });
 
     // Perform login if credentials supplied
