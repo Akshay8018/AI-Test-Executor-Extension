@@ -4,7 +4,7 @@
  * Uses importScripts to load executionEngine (service workers don't support script tags).
  */
 
-importScripts('executionEngine.js', 'stepInterpreter.js');
+importScripts('executionEngine.js', 'stepInterpreter.js', 'StepParserEnhancer.js');
 
 var executionState = {
   running: false,

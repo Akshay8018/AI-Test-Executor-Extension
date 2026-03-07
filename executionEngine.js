@@ -83,6 +83,11 @@ async function executeTestCases(testCases, tabId) {
 
       // Always use full step description for execution (not truncated)
       var action = interpretStep(step.description, step.testData);
+      
+      // Enterprise Enhancement Layer 1: NLP Enrichment
+      if (typeof enhanceStepSemantic === 'function') {
+        action = enhanceStepSemantic(step.description, step.testData, action);
+      }
 
       // Ensure validation steps actually use the ExpectedResult text
       // from Excel when present (for content.js validate logic).
