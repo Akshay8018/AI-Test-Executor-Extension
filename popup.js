@@ -318,6 +318,12 @@ document.addEventListener('DOMContentLoaded', function () {
     setStatus('Sending stop signal...', true);
     addFeedLine('User requested stop...', 'info');
     chrome.runtime.sendMessage({ type: 'STOP_TESTS' });
+    // Persist "stopped" immediately so reopening the popup shows stopped UI, not running
+    chrome.storage.local.get(['executionState'], function(data) {
+      var state = data.executionState || {};
+      state.isRunning = false;
+      chrome.storage.local.set({ executionState: state });
+    });
   });
 
   // ─── MESSAGES FROM BACKGROUND ────────────────────────────────────────────
@@ -649,7 +655,7 @@ document.addEventListener('DOMContentLoaded', function () {
         var bt = $('startBtnText');   if (bt) bt.textContent = '⏳ Running...';
       } else {
         currentResults = lastResults || null;
-        switchTab('results');
+        // Keep default tab (Setup) when opening; only switch to Logs when run is still in progress
         var stopBtn = $('stopBtn');    if (stopBtn) stopBtn.classList.add('hidden');
         var liveDot = $('liveDot');    if (liveDot) liveDot.classList.remove('active');
         var btn = $('startBtn');       if (btn) btn.disabled = false;
