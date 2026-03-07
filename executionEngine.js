@@ -19,7 +19,7 @@ async function executeTestCases(testCases, tabId) {
   var estimatedSecs = totalSteps * 4 + testCases.length * 3;
   broadcastTiming(testCases.length, totalSteps, estimatedSecs);
 
-  for (var i = 0; i < testCases.length; i++) {
+  outer: for (var i = 0; i < testCases.length; i++) {
     var tc = testCases[i];
 
     broadcastUI({
@@ -46,7 +46,7 @@ async function executeTestCases(testCases, tabId) {
       });
       results.failed++;
       results.testCases.push(tcResult);
-      break;
+      break outer;
     }
 
     for (var j = 0; j < tc.steps.length; j++) {
@@ -60,7 +60,12 @@ async function executeTestCases(testCases, tabId) {
           status: 'Failed',
           actualResult: 'Stopped by user'
         });
-        break;
+        results.failed++;
+        results.testCases.push(tcResult);
+        results.duration = Math.round((Date.now() - results.startTime) / 1000);
+        broadcastUI({ kind: 'tc-fail', message: tc.id + ' -- STOPPED' });
+        broadcastStatus(results, true);
+        return results;
       }
       var step = tc.steps[j];
       var shortDesc = step.description.length > 70
@@ -154,6 +159,9 @@ async function executeTestCases(testCases, tabId) {
 async function retryAction(tabId, action, maxRetries) {
   var lastResult = { status: 'Failed', error: 'Not executed' };
   for (var attempt = 0; attempt < maxRetries; attempt++) {
+    if (typeof executionState !== 'undefined' && executionState.abortRequested) {
+      return lastResult;
+    }
     try {
       var response = await sendToContent(tabId, { type: 'EXECUTE_ACTION', action: action });
       if (response && (response.status === 'Success' || response.status === 'Passed')) {
@@ -189,6 +197,7 @@ function broadcastUI(payload) {
     ? { type: 'UI_UPDATE', kind: 'info', message: payload }
     : Object.assign({ type: 'UI_UPDATE', kind: 'info' }, payload);
   chrome.runtime.sendMessage(msg).catch(function() {});
+  persistUI(msg);
 }
 
 function broadcastTiming(tcCount, stepCount, estimatedSecs) {
@@ -198,6 +207,7 @@ function broadcastTiming(tcCount, stepCount, estimatedSecs) {
     stepCount: stepCount,
     estimatedSecs: estimatedSecs
   }).catch(function() {});
+  persistTiming(tcCount, stepCount, estimatedSecs);
 }
 
 function broadcastStatus(results, finished) {
@@ -206,6 +216,49 @@ function broadcastStatus(results, finished) {
     results: results,
     finished: !!finished
   }).catch(function() {});
+  persistStatus(results, finished);
+}
+
+function persistUI(msg) {
+  chrome.storage.local.get(['executionState'], function(data) {
+    var state = data.executionState || {};
+    state.logLines = state.logLines || [];
+    state.logLines.push({
+      text: msg.message || '',
+      kind: msg.kind || 'info',
+      full: msg.fullMessage || msg.message || ''
+    });
+    if (msg.fullMessage || msg.message) state.currentStep = msg.fullMessage || msg.message;
+    chrome.storage.local.set({ executionState: state });
+  });
+}
+
+function persistTiming(tcCount, stepCount, estimatedSecs) {
+  chrome.storage.local.get(['executionState'], function(data) {
+    var state = data.executionState || {};
+    state.tcCount = tcCount;
+    state.stepCount = stepCount;
+    state.countdownSecs = estimatedSecs;
+    chrome.storage.local.set({ executionState: state });
+  });
+}
+
+function persistStatus(results, finished) {
+  chrome.storage.local.get(['executionState', 'lastResults'], function(data) {
+    var state = data.executionState || {};
+    var total = (results && results.total) || 0;
+    var passed = (results && results.passed) || 0;
+    var failed = (results && results.failed) || 0;
+    var pct = total ? Math.min(Math.round(((passed + failed) / total) * 100), 100) : 0;
+    state.progress = { total: total, passed: passed, failed: failed, pct: pct };
+    state.totalCases = total;
+    if (finished) {
+      state.isRunning = false;
+      chrome.storage.local.set({ executionState: state, lastResults: results || null });
+    } else {
+      chrome.storage.local.set({ executionState: state });
+    }
+  });
 }
 
 function sleep(ms) {

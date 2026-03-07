@@ -282,6 +282,87 @@
         </table>
       </div>
     </div>
+
+    <!-- Best & Robust Step Writing Guide -->
+    <div class="guide-section step-guide">
+      <div class="guide-banner step-guide-banner">
+        <div class="guide-banner-icon">✓</div>
+        <div>
+          <div class="guide-banner-title">Best &amp; Robust Step Writing Guide</div>
+          <div class="guide-banner-sub">Follow these rules so every step runs without fail</div>
+        </div>
+      </div>
+
+      <div class="step-rules">
+        <div class="step-rule-title">1. Always name the section when multiple similar elements exist</div>
+        <p class="step-rule-p">If the page has several cards/buttons with the same label (e.g. multiple "Continue" buttons), tell the executor <strong>which section</strong> the element is in. The executor will find that section first, then the button/link inside it.</p>
+        <ul class="step-rule-list">
+          <li><strong>Use:</strong> <code>Click the Continue button from the FracPro Live+ card</code></li>
+          <li><strong>Use:</strong> <code>Click Submit in the Login section</code></li>
+          <li><strong>Avoid:</strong> <code>Click Continue</code> (ambiguous when there are many)</li>
+        </ul>
+        <p class="step-rule-p">Phrases that work: <em>from the … card</em>, <em>in the … section</em>, <em>on the … panel</em>, <em>within the … form</em>.</p>
+
+        <div class="step-rule-title">2. Start the step with a clear action verb</div>
+        <ul class="step-rule-list">
+          <li><strong>Click:</strong> Click, Press, Tap, Submit — e.g. <code>Click the Login button</code></li>
+          <li><strong>Type:</strong> Enter, Type, Input, Fill in, Write — e.g. <code>Enter username in username field</code>. Put the value in <strong>TestData</strong>.</li>
+          <li><strong>Verify:</strong> Verify, Validate, Check, Assert — e.g. <code>Verify the dashboard title is displayed</code>. Put expected text in <strong>ExpectedResult</strong>.</li>
+          <li><strong>Navigate:</strong> Navigate to, Open URL, Go to — e.g. <code>Navigate to https://app.example.com</code>. URL can be in step or TestData.</li>
+        </ul>
+
+        <div class="step-rule-title">3. Use the exact text that appears on the page</div>
+        <p class="step-rule-p">Button labels, section titles, and link text should match the UI (case-insensitive). E.g. if the button says "Sign in", write <code>Click the Sign in button</code> or <code>Click Sign in</code>.</p>
+
+        <div class="step-rule-title">4. Put input values in TestData</div>
+        <p class="step-rule-p">For type/enter steps, keep the step description short and put the value to type in the <strong>TestData</strong> column: e.g. Step = <code>Enter email in email field</code>, TestData = <code>user@example.com</code>.</p>
+
+        <div class="step-rule-title">5. Use ExpectedResult for verification steps</div>
+        <p class="step-rule-p">For verify/check steps, put the expected text or condition in <strong>ExpectedResult</strong>. E.g. Step = <code>Verify welcome message</code>, ExpectedResult = <code>Welcome, Admin</code>.</p>
+      </div>
+
+      <div class="sample-box">
+        <div class="sample-box-title">✅ Robust step examples (copy into your Excel)</div>
+        <div class="sample-scroll">
+          <table class="sample-tbl">
+            <thead>
+              <tr><th>TestStepDescription</th><th>TestData</th><th>ExpectedResult</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Navigate to the application URL</td><td>https://yourapp.com</td><td>Page loads</td></tr>
+              <tr><td>Enter username in username field</td><td>admin@test.com</td><td>Field is filled</td></tr>
+              <tr><td>Enter password in password field</td><td>YourPassword123</td><td>Password masked</td></tr>
+              <tr><td>Click the Login button</td><td></td><td>Dashboard is visible</td></tr>
+              <tr><td>Click the Continue button from the FracPro Live+ card</td><td></td><td>Next page opens</td></tr>
+              <tr><td>Click any Pad in the Pads section</td><td></td><td>Pad detail opens</td></tr>
+              <tr><td>Verify the page title contains Dashboard</td><td></td><td>Dashboard</td></tr>
+              <tr><td>Verify the URL contains /home</td><td></td><td>/home</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="step-dos-donts">
+        <div class="step-do">
+          <span class="step-do-title">✓ Do</span>
+          <ul>
+            <li>Mention the section/card when there are multiple similar buttons</li>
+            <li>Use one clear action per step (one click, one type, one verify)</li>
+            <li>Match the exact button/link/section text from the UI</li>
+            <li>Put typed values in TestData and expected text in ExpectedResult</li>
+          </ul>
+        </div>
+        <div class="step-dont">
+          <span class="step-dont-title">✗ Don't</span>
+          <ul>
+            <li>Write vague steps like "Click the button" when many buttons exist</li>
+            <li>Combine multiple actions in one step (e.g. "Login and go to Settings")</li>
+            <li>Use abbreviations that don’t appear on the page</li>
+            <li>Leave TestData empty when the step types a value</li>
+          </ul>
+        </div>
+      </div>
+    </div>
   </div><!-- /tab-guide -->
 
   <!-- ======================================================
@@ -400,6 +481,12 @@
     </div>
 
   </div><!-- /tab-results -->
+
+  <!-- App footer: quick tip & identity -->
+  <footer class="app-footer">
+    <span class="app-footer-tip">💡 Tip: Use the Guide tab for robust step-writing rules.</span>
+    <span class="app-footer-ver">AI Test Executor v1.0</span>
+  </footer>
 
   <script src="libs/xlsx.min.js"></script>
   <script src="libs/FileSaver.js"></script>

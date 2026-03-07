@@ -7,6 +7,8 @@
 (function() {
   'use strict';
 
+  var executorAbortRequested = false;
+
   // ─── Locator Strategies (Priority Order) ────────────────────────────────────
   var strategies = [
     // 1. ID
@@ -48,15 +50,84 @@
     var selectors = 'button, a, [role="button"], input[type="button"], input[type="submit"], span, div, td, th, li';
     var els = Array.from(document.querySelectorAll(selectors));
     var lText = text.toLowerCase();
-    // Exact match first
     var exact = els.find(function(el) {
       return (el.textContent || el.value || '').trim().toLowerCase() === lText && isVisible(el);
     });
     if (exact) return exact;
-    // Partial match
     return els.find(function(el) {
       return (el.textContent || el.value || '').trim().toLowerCase().includes(lText) && isVisible(el);
     });
+  }
+
+  function findAllByVisibleText(text) {
+    var selectors = 'button, a, [role="button"], input[type="button"], input[type="submit"]';
+    var els = Array.from(document.querySelectorAll(selectors));
+    var lText = text.toLowerCase();
+    return els.filter(function(el) {
+      var content = (el.textContent || el.value || '').trim().toLowerCase();
+      return (content === lText || content.includes(lText)) && isVisible(el);
+    });
+  }
+
+  function sectionContainsText(el, phrase) {
+    if (!phrase || !el) return false;
+    var pt = (el.textContent || '').toLowerCase();
+    var lower = phrase.toLowerCase();
+    if (pt.indexOf(lower) !== -1) return true;
+    var words = lower.split(/\s+/).filter(function(w) { return w.length > 1; });
+    var matchCount = words.filter(function(w) { return pt.indexOf(w) !== -1; }).length;
+    return words.length >= 2 && matchCount >= 2;
+  }
+
+  function findSectionThenTarget(sectionPhrase, targetPhrase) {
+    if (!sectionPhrase || !targetPhrase) return null;
+    var sectionSelectors = 'section, article, [role="region"], div[class*="card"], div[class*="panel"], div[class*="section"], div[class*="block"]';
+    var sections = Array.from(document.querySelectorAll(sectionSelectors));
+    var alsoDivs = document.querySelectorAll('div');
+    var allContainers = [];
+    sections.forEach(function(el) { if (isVisible(el)) allContainers.push(el); });
+    for (var i = 0; i < Math.min(alsoDivs.length, 200); i++) {
+      var el = alsoDivs[i];
+      if (el.offsetParent === null) continue;
+      if (allContainers.indexOf(el) !== -1) continue;
+      if (sectionContainsText(el, sectionPhrase)) allContainers.push(el);
+    }
+    var targetLower = (targetPhrase || '').toLowerCase();
+    for (var s = 0; s < allContainers.length; s++) {
+      var container = allContainers[s];
+      var buttons = container.querySelectorAll('button, a, [role="button"], input[type="button"], input[type="submit"]');
+      for (var b = 0; b < buttons.length; b++) {
+        var btn = buttons[b];
+        if (!isVisible(btn)) continue;
+        var txt = (btn.textContent || btn.value || '').trim().toLowerCase();
+        if (txt === targetLower || txt.includes(targetLower)) return btn;
+      }
+    }
+    return null;
+  }
+
+  function hasAncestorWithText(el, contextText) {
+    if (!contextText || !el) return false;
+    var lower = contextText.toLowerCase();
+    var contextWords = lower.split(/\s+/).filter(function(w) { return w.length > 1; });
+    var parent = el.parentElement;
+    while (parent && parent !== document.body) {
+      var pt = (parent.textContent || '').toLowerCase();
+      if (pt.indexOf(lower) !== -1) return true;
+      var matchCount = contextWords.filter(function(w) { return pt.indexOf(w) !== -1; }).length;
+      if (contextWords.length >= 2 && matchCount >= 2) return true;
+      parent = parent.parentElement;
+    }
+    return false;
+  }
+
+  function findInContext(actionText, contextText) {
+    if (!actionText || !contextText) return null;
+    var candidates = findAllByVisibleText(actionText);
+    for (var i = 0; i < candidates.length; i++) {
+      if (hasAncestorWithText(candidates[i], contextText)) return candidates[i];
+    }
+    return null;
   }
 
   function findByXPath(xpath) {
@@ -79,8 +150,21 @@
     return candidates;
   }
 
-  function locateElement(target) {
+  function locateElement(target, section) {
     if (!target) return null;
+    if (section) {
+      var bySection = findSectionThenTarget(section, target);
+      if (bySection) return bySection;
+      var inContext = findInContext(target, section);
+      if (inContext) return inContext;
+    }
+    var words = (target || '').trim().split(/\s+/).filter(function(w) { return w.length >= 2; });
+    if (words.length >= 2) {
+      var actionWord = words[0];
+      var contextPhrase = words.slice(1).join(' ');
+      var inCtx = findInContext(actionWord, contextPhrase);
+      if (inCtx) return inCtx;
+    }
     var candidates = getTargetCandidates(target);
     for (var c = 0; c < candidates.length; c++) {
       var attempt = candidates[c];
@@ -103,12 +187,19 @@
 
   // ─── Message Listener ────────────────────────────────────────────────────────
   chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
+    if (request.type === 'EXECUTOR_ABORT') {
+      executorAbortRequested = true;
+      return false;
+    }
+    if (request.type === 'EXECUTOR_RESET') {
+      executorAbortRequested = false;
+      return false;
+    }
     if (request.type === 'EXECUTE_ACTION') {
       executeAction(request.action).then(sendResponse);
       return true;
     }
     if (request.type === 'PERFORM_LOGIN') {
-      // Don't even respond if this is an empty tracking iframe - avoids channel collisions
       if (document.querySelectorAll('input').length === 0 && window !== window.top) {
         return false;
       }
@@ -127,9 +218,10 @@
       logUI('Scanning page for login fields...');
       var userEl = null, pwEl = null, btnEl = null;
       var maxWaitSteps = 30; // 15 seconds
-      
+
       // 1. Wait for username field
       for (var i = 0; i < maxWaitSteps; i++) {
+        if (executorAbortRequested) return { status: 'Aborted', error: 'Stopped by user' };
         userEl = document.getElementById('signInName') ||
                  document.getElementById('email') ||
                  document.getElementById('username') ||
@@ -142,44 +234,50 @@
                  document.querySelector('input[name="email"]') ||
                  document.querySelector('input[name="Sign in name"]');
         if (userEl && isVisible(userEl) && !userEl.disabled) break;
-        await wait(500);
+        await waitOrAbort(500);
       }
-      
+
+      if (executorAbortRequested) return { status: 'Aborted', error: 'Stopped by user' };
       if (!userEl && window !== window.top) {
         return { status: 'Ignored', message: 'Not the auth frame' };
       }
-      
+
       if (userEl) {
         logUI('Found username field: ' + (userEl.id || userEl.name || 'email input') + '. Entering email...');
         fillInput(userEl, creds.username);
-        await wait(800);
+        await waitOrAbort(800);
       } else {
         logUI('Error: Could not locate username field.');
         return { status: 'Failed', error: 'Could not find username field' };
       }
+      if (executorAbortRequested) return { status: 'Aborted', error: 'Stopped by user' };
 
       // 2. Wait for password field
       for (var i = 0; i < maxWaitSteps; i++) {
+        if (executorAbortRequested) return { status: 'Aborted', error: 'Stopped by user' };
         pwEl = document.getElementById('password') ||
                document.getElementById('passwd') ||
                locateElement('password') ||
                document.querySelector('input[type="password"]') ||
                document.querySelector('input[name="passwd"]');
         if (pwEl && isVisible(pwEl) && !pwEl.disabled) break;
-        await wait(500);
+        await waitOrAbort(500);
       }
-      
+      if (executorAbortRequested) return { status: 'Aborted', error: 'Stopped by user' };
+
       if (pwEl) {
         logUI('Found password field: ' + (pwEl.id || pwEl.name || 'password input') + '. Entering password...');
         fillInput(pwEl, creds.password);
-        await wait(800);
+        await waitOrAbort(800);
       } else {
         logUI('Error: Could not locate password field.');
       }
+      if (executorAbortRequested) return { status: 'Aborted', error: 'Stopped by user' };
 
       // 3. Wait for login button
       logUI('Searching for login button...');
       for (var i = 0; i < maxWaitSteps; i++) {
+        if (executorAbortRequested) return { status: 'Aborted', error: 'Stopped by user' };
         btnEl = document.getElementById('next') ||
                 document.getElementById('idSIButton9') ||
                 findByVisibleText('Sign in') ||
@@ -189,7 +287,7 @@
                 document.querySelector('button[type="submit"]') ||
                 document.querySelector('input[type="submit"]');
         if (btnEl && isVisible(btnEl) && !btnEl.disabled) break;
-        await wait(500);
+        await waitOrAbort(500);
       }
       
       if (btnEl) {
@@ -211,6 +309,7 @@
   // ─── Action Executor ─────────────────────────────────────────────────────────
   async function executeAction(action) {
     try {
+      if (executorAbortRequested) return { status: 'Failed', error: 'Stopped by user' };
       if (action.type === 'navigate') {
         window.location.href = action.value || action.url;
         return { status: 'Success' };
@@ -221,7 +320,7 @@
         return { status: 'Success' };
       }
 
-      var el = locateElement(action.target);
+      var el = locateElement(action.target, action.section);
 
       if (action.type === 'validate') {
         var text = (action.target || '').toLowerCase();
@@ -314,6 +413,23 @@
 
   function wait(ms) {
     return new Promise(function(resolve) { setTimeout(resolve, ms); });
+  }
+
+  function waitOrAbort(ms) {
+    return new Promise(function(resolve) {
+      var start = Date.now();
+      var id = setInterval(function() {
+        if (executorAbortRequested) {
+          clearInterval(id);
+          resolve();
+          return;
+        }
+        if (Date.now() - start >= ms) {
+          clearInterval(id);
+          resolve();
+        }
+      }, 80);
+    });
   }
 
 })();

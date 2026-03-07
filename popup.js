@@ -288,6 +288,14 @@ document.addEventListener('DOMContentLoaded', function () {
         password:      ($('loginPassword')  || {}).value || ''
       };
 
+      // Open execution in a separate popup window (app-like on the taskbar) so user can watch progress and stop from Logs
+      chrome.windows.create({
+        url: chrome.runtime.getURL('popup.html'),
+        type: 'popup',
+        width: 480,
+        height: 720
+      });
+
       chrome.runtime.sendMessage({ type: 'START_TESTS', testCases: testCases, url: url, loginCreds: loginCreds },
         function (response) {
           if (chrome.runtime.lastError) {
@@ -318,6 +326,12 @@ document.addEventListener('DOMContentLoaded', function () {
     setStatus('Sending stop signal...', true);
     addFeedLine('User requested stop...', 'info');
     chrome.runtime.sendMessage({ type: 'STOP_TESTS' });
+    // Persist "stopped" immediately so reopening the popup shows stopped UI, not running
+    chrome.storage.local.get(['executionState'], function(data) {
+      var state = data.executionState || {};
+      state.isRunning = false;
+      chrome.storage.local.set({ executionState: state });
+    });
   });
 
   // ─── MESSAGES FROM BACKGROUND ────────────────────────────────────────────
@@ -602,5 +616,66 @@ document.addEventListener('DOMContentLoaded', function () {
   function escHtml(str) {
     return (str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
+
+  // ─── RESTORE STATE WHEN POPUP REOPENS (execution running or just finished) ─
+  function restoreFromStorage() {
+    chrome.storage.local.get(['executionState', 'lastResults'], function(data) {
+      var state = data.executionState;
+      var lastResults = data.lastResults;
+      if (!state) return;
+
+      var logLines = state.logLines || [];
+      var isRunning = !!state.isRunning;
+      var progress = state.progress || {};
+      var totalCases = state.totalCases || 0;
+      var currentStep = state.currentStep || '';
+
+      if (logLines.length === 0 && !isRunning && !lastResults) return;
+
+      // Restore log feed
+      var body = $('liveFeedBody');
+      if (body) {
+        body.innerHTML = '';
+        logLines.forEach(function(line) {
+          addFeedLine(line.text || '', line.kind || 'info', line.full || line.text);
+        });
+        // Don't show badge count when user just opens the extension; only during live run.
+        resetLogsBadge();
+      }
+
+      // Restore progress
+      var pct = progress.pct || 0;
+      var pb = $('progressBar');   if (pb)  pb.style.width = pct + '%';
+      var pp = $('progressPercent'); if (pp) pp.textContent = pct + '%';
+      var ps = $('passedSteps');   if (ps) ps.textContent = progress.passed || 0;
+      var fs = $('failedSteps');   if (fs) fs.textContent = progress.failed || 0;
+      setRadial(pct);
+      var totalEl = $('totalCases'); if (totalEl) totalEl.textContent = totalCases;
+
+      updateCurrentStep(currentStep || (isRunning ? 'Execution in progress...' : 'Execution complete (or stopped)'));
+      setStatus(isRunning ? 'Execution in progress...' : 'Execution Complete/Stopped', false);
+
+      if (isRunning) {
+        switchTab('logs');
+        var rw = $('resultsWaiting'); if (rw) rw.classList.add('hidden');
+        var rl = $('reportLinks');     if (rl) rl.classList.add('hidden');
+        var stopBtn = $('stopBtn');    if (stopBtn) stopBtn.classList.remove('hidden');
+        var liveDot = $('liveDot');    if (liveDot) liveDot.classList.add('active');
+        var btn = $('startBtn');       if (btn) btn.disabled = true;
+        var bt = $('startBtnText');   if (bt) bt.textContent = '⏳ Running...';
+      } else {
+        currentResults = lastResults || null;
+        // Keep default tab (Setup) when opening; only switch to Logs when run is still in progress
+        var stopBtn = $('stopBtn');    if (stopBtn) stopBtn.classList.add('hidden');
+        var liveDot = $('liveDot');    if (liveDot) liveDot.classList.remove('active');
+        var btn = $('startBtn');       if (btn) btn.disabled = false;
+        var bt = $('startBtnText');   if (bt) bt.textContent = '✓ Done — Run Again';
+        var rl = $('reportLinks');    if (rl) rl.classList.remove('hidden');
+        var rw = $('resultsWaiting'); if (rw) rw.classList.add('hidden');
+      }
+    });
+  }
+
+  restoreFromStorage();
 
 }); // end DOMContentLoaded
