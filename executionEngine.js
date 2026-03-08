@@ -143,6 +143,11 @@ async function executeTestCases(testCases, tabId) {
       tcResult.steps.push(finalStep);
     }
 
+    // --- Enterprise NLP Phase: Expected Result Validation ---
+    if (typeof runExpectedResultValidation === 'function') {
+        tcResult = await runExpectedResultValidation(tabId, tc, tcResult);
+    }
+
     if (tcResult.status === 'Passed') {
       results.passed++;
       broadcastUI({ kind: 'tc-pass', message: tc.id + ' -- PASSED' });

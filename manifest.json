@@ -36,6 +36,7 @@
         "ContextValidator.js",
         "SelectorResolver.js",
         "ExecutionIntelligenceLayer.js",
+        "UIStateScanner.js",
         "content.js"
       ],
       "all_frames": true

@@ -215,6 +215,15 @@
       }
       return true;
     }
+    if (request.type === 'EXECUTE_NLP_VALIDATION') {
+      if (typeof window.UIStateScanner !== 'undefined') {
+          var result = window.UIStateScanner.validateState(request.payload);
+          sendResponse(result);
+      } else {
+          sendResponse({ status: 'Failed', log: 'UIStateScanner not loaded in content script.' });
+      }
+      return true;
+    }
     if (request.type === 'PERFORM_LOGIN') {
       if (document.querySelectorAll('input').length === 0 && window !== window.top) {
         return false;

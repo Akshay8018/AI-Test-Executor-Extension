@@ -12,14 +12,22 @@ function generateHTMLReport(results) {
 
   var caseRows = (results.testCases || []).map(function(tc) {
     var stepRows = (tc.steps || []).map(function(step) {
-      var badge = step.status === 'Passed'
-        ? '<span class="badge pass">PASS</span>'
-        : '<span class="badge fail">FAIL</span>';
+      var isValidation = step.stepNumber === 'Validation';
+      var badge = '';
+      if (isValidation) {
+          var badgeClass = step.status === 'Passed' ? 'badge pass' : 'badge fail';
+          var badgeText  = step.status === 'Passed' ? 'PASS' : 'FAIL';
+          badge = '<span class="' + badgeClass + '">' + badgeText + '</span>';
+      }
+      
       var screenshot = step.screenshot
-        ? '<img src="' + step.screenshot + '" class="thumb" onclick="window.open(this.src)" title="Click to enlarge">'
+        ? '<img src="' + step.screenshot + '" class="thumb" onclick="openModal(this.src)" title="Click to enlarge">'
         : '<span class="no-img">—</span>';
-      return '<tr>' +
-        '<td>' + step.stepNumber + '</td>' +
+        
+      var rowClass = isValidation ? ' class="val-row"' : '';
+      
+      return '<tr' + rowClass + '>' +
+        '<td><strong>' + step.stepNumber + '</strong></td>' +
         '<td>' + escHtml(step.description) + '</td>' +
         '<td>' + escHtml(step.expectedResult) + '</td>' +
         '<td>' + escHtml(step.actualResult || '—') + '</td>' +
@@ -55,13 +63,24 @@ function generateHTMLReport(results) {
       '.tc-card{background:white;border-radius:10px;margin-bottom:20px;overflow:hidden;box-shadow:0 2px 6px rgba(0,0,0,.06)}' +
       '.tc-header{padding:14px 18px;background:#f8f9ff;border-bottom:1px solid #e5e7eb;display:flex;align-items:center;gap:10px;font-size:14px}' +
       '.badge{padding:3px 9px;border-radius:4px;font-size:11px;font-weight:700;color:white}' +
-      '.badge.pass{background:#10b981} .badge.fail{background:#ef4444}' +
+      '.badge.pass{background:#10b981} .badge.fail{background:#ef4444} .badge.ai-val{background:#8b5cf6}' +
+      '.val-row{background:rgba(139, 92, 246, 0.05)}' +
       '.step-table{width:100%;border-collapse:collapse;font-size:13px}' +
       '.step-table th,.step-table td{padding:10px 14px;border-bottom:1px solid #e5e7eb;text-align:left;vertical-align:top}' +
+      '.step-table th:nth-child(5), .step-table td:nth-child(5){text-align:center}' +
       '.step-table th{background:#f8fafc;font-weight:600;font-size:12px;color:#64748b}' +
-      '.thumb{max-width:120px;max-height:80px;cursor:pointer;border:1px solid #ddd;border-radius:4px}' +
+      '.thumb{max-width:120px;max-height:80px;cursor:pointer;border:1px solid #ddd;border-radius:4px;transition: transform 0.2s;}' +
+      '.thumb:hover{transform: scale(1.05);}' +
       '.no-img{color:#cbd5e1}' +
-    '</style></head><body><div class="container">' +
+      '.modal{display:none;position:fixed;z-index:9999;left:0;top:0;width:100%;height:100%;background:rgba(0,0,0,0.85);align-items:center;justify-content:center;cursor:zoom-out;opacity:0;transition:opacity 0.2s}' +
+      '.modal.open{display:flex;opacity:1}' + 
+      '.modal img{max-width:90%;max-height:90%;border-radius:8px;box-shadow:0 10px 25px rgba(0,0,0,0.5);}' +
+    '</style>' +
+    '<script>' +
+      'function openModal(src){ document.getElementById("modalImg").src = src; document.getElementById("imgModal").classList.add("open"); }' +
+      'function closeModal(){ document.getElementById("imgModal").classList.remove("open"); setTimeout(()=>{document.getElementById("modalImg").src = "";}, 200); }' +
+    '</script>' +
+    '</head><body><div class="container">' +
     '<h1>Execution Report</h1>' +
     '<p style="color:#64748b;font-size:13px">Generated: ' + new Date().toLocaleString() + '</p>' +
     '<div class="summary">' +
@@ -71,7 +90,9 @@ function generateHTMLReport(results) {
       '<div class="stat d"><div class="num">' + duration + 's</div><div class="lbl">Duration</div></div>' +
     '</div>' +
     caseRows +
-    '</div></body></html>';
+    '</div>' +
+    '<div id="imgModal" class="modal" onclick="closeModal()"><img id="modalImg"></div>' +
+    '</body></html>';
 }
 
 function escHtml(str) {
