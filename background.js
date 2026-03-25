@@ -4,7 +4,13 @@
  * Uses importScripts to load executionEngine (service workers don't support script tags).
  */
 
-importScripts('executionEngine.js', 'stepInterpreter.js');
+importScripts(
+  'executionEngine.js', 
+  'stepInterpreter.js', 
+  'StepParserEnhancer.js',
+  'NLPIntentParser.js',
+  'PostExecutionValidator.js'
+);
 
 var executionState = {
   running: false,

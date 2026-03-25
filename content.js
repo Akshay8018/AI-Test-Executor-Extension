@@ -64,8 +64,9 @@
     var els = Array.from(document.querySelectorAll(selectors));
     var lText = text.toLowerCase();
     return els.filter(function(el) {
+      if (!isVisible(el)) return false;
       var content = (el.textContent || el.value || '').trim().toLowerCase();
-      return (content === lText || content.includes(lText)) && isVisible(el);
+      return content === lText || content.includes(lText);
     });
   }
 
@@ -93,9 +94,11 @@
       if (sectionContainsText(el, sectionPhrase)) allContainers.push(el);
     }
     var targetLower = (targetPhrase || '').toLowerCase();
+    var selectors = 'button, a, [role="button"], input[type="button"], input[type="submit"]';
+
     for (var s = 0; s < allContainers.length; s++) {
       var container = allContainers[s];
-      var buttons = container.querySelectorAll('button, a, [role="button"], input[type="button"], input[type="submit"]');
+      var buttons = container.querySelectorAll(selectors);
       for (var b = 0; b < buttons.length; b++) {
         var btn = buttons[b];
         if (!isVisible(btn)) continue;
@@ -196,7 +199,29 @@
       return false;
     }
     if (request.type === 'EXECUTE_ACTION') {
-      executeAction(request.action).then(sendResponse);
+      if (window.ExecutionIntelligenceLayer && request.action.IsEnhanced) {
+        window.ExecutionIntelligenceLayer.smartExecute(request.action).then(function(res) {
+          if (res && !res.requiresLegacyDispatcher) {
+            sendResponse(res);
+          } else {
+            // Safe fallback 
+            executeAction(request.action).then(sendResponse);
+          }
+        }).catch(function(e) {
+          executeAction(request.action).then(sendResponse);
+        });
+      } else {
+        executeAction(request.action).then(sendResponse);
+      }
+      return true;
+    }
+    if (request.type === 'EXECUTE_NLP_VALIDATION') {
+      if (typeof window.UIStateScanner !== 'undefined') {
+          var result = window.UIStateScanner.validateState(request.payload);
+          sendResponse(result);
+      } else {
+          sendResponse({ status: 'Failed', log: 'UIStateScanner not loaded in content script.' });
+      }
       return true;
     }
     if (request.type === 'PERFORM_LOGIN') {

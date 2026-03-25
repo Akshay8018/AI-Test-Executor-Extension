@@ -31,7 +31,14 @@
   "content_scripts": [
     {
       "matches": [ "<all_urls>" ],
-      "js": [ "content.js" ],
+      "js": [
+        "ExactMatchEngine.js",
+        "ContextValidator.js",
+        "SelectorResolver.js",
+        "ExecutionIntelligenceLayer.js",
+        "UIStateScanner.js",
+        "content.js"
+      ],
       "all_frames": true
     }
   ],
